@@ -387,7 +387,7 @@ The underlying procurement analysis is presented in **£**. The Tableau dashboar
 ---
 
 # 13. Dashboard
-
+![Dashboard showing Supplier Performance & Procurement Risk](Supplier%20Performance%20&%20Procurement%20Risk.png)
 The Tableau dashboard provides an interactive view of:
 
 - Total procurement spend
