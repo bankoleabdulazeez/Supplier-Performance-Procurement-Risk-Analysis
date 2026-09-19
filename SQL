@@ -1,0 +1,501 @@
+SELECT * 
+FROM suppliers;
+
+SELECT COUNT(*) AS supplier_count
+FROM suppliers;
+
+-- Supplier count by country
+SELECT
+    country,
+    COUNT(*) AS supplier_count
+FROM suppliers
+GROUP BY country
+ORDER BY supplier_count DESC;
+
+-- Connect Suppliers to Products
+DESCRIBE products;
+
+SELECT
+    s.supplier_id,
+    s.supplier_name,
+    p.product_id,
+    p.product_name,
+    p.category,
+    p.sub_category,
+    p.unit_cost,
+    p.unit_price
+FROM suppliers s
+JOIN products p
+    ON s.supplier_id = p.supplier_id
+ORDER BY s.supplier_name;
+
+-- Supplier product coverage
+
+SELECT
+    s.supplier_id,
+    s.supplier_name,
+    COUNT(p.product_id) AS product_count
+FROM suppliers s
+JOIN products p
+    ON s.supplier_id = p.supplier_id
+GROUP BY
+    s.supplier_id,
+    s.supplier_name
+ORDER BY product_count DESC;
+
+-- Supplier Procurement Spend
+DESCRIBE order_items;
+DESCRIBE orders;
+
+SELECT
+    s.supplier_id,
+    s.supplier_name,
+    COUNT(DISTINCT oi.order_id) AS order_count,
+    SUM(oi.quantity) AS units_ordered,
+    ROUND(SUM(oi.quantity * p.unit_cost), 2) AS procurement_spend
+FROM suppliers s
+JOIN products p
+    ON s.supplier_id = p.supplier_id
+JOIN order_items oi
+    ON p.product_id = oi.product_id
+JOIN orders o
+    ON oi.order_id = o.order_id
+GROUP BY
+    s.supplier_id,
+    s.supplier_name
+ORDER BY procurement_spend DESC;
+
+-- Supplier Spend Concentration
+
+SELECT
+    s.supplier_id,
+    s.supplier_name,
+    COUNT(DISTINCT oi.order_id) AS order_count,
+    SUM(oi.quantity) AS units_ordered,
+    ROUND(SUM(oi.quantity * p.unit_cost), 2) AS procurement_spend,
+    ROUND(
+        SUM(oi.quantity * p.unit_cost) /
+        (SELECT SUM(oi2.quantity * p2.unit_cost)
+         FROM order_items oi2
+         JOIN products p2
+             ON oi2.product_id = p2.product_id)
+        * 100,
+        2
+    ) AS spend_percentage
+FROM suppliers s
+JOIN products p
+    ON s.supplier_id = p.supplier_id
+JOIN order_items oi
+    ON p.product_id = oi.product_id
+GROUP BY
+    s.supplier_id,
+    s.supplier_name
+ORDER BY procurement_spend DESC;
+
+
+-- Supplier operational performance
+DESCRIBE suppliers;
+    
+SELECT
+    supplier_id,
+    supplier_name,
+    country,
+    avg_lead_time_days,
+    reliability_rating
+FROM suppliers
+ORDER BY reliability_rating DESC;    
+    
+-- Overall Benchmark    
+SELECT
+    ROUND(AVG(avg_lead_time_days), 2) AS avg_supplier_lead_time,
+    ROUND(AVG(reliability_rating), 2) AS avg_supplier_reliability,
+    MIN(avg_lead_time_days) AS min_lead_time,
+    MAX(avg_lead_time_days) AS max_lead_time,
+    MIN(reliability_rating) AS min_reliability,
+    MAX(reliability_rating) AS max_reliability
+FROM suppliers;    
+    
+-- Supplier risk view    
+SELECT
+    s.supplier_id,
+    s.supplier_name,
+    s.country,
+    s.avg_lead_time_days,
+    s.reliability_rating,
+    ROUND(SUM(oi.quantity * p.unit_cost), 2) AS procurement_spend,
+    ROUND(
+        SUM(oi.quantity * p.unit_cost) /
+        (SELECT SUM(oi2.quantity * p2.unit_cost)
+         FROM order_items oi2
+         JOIN products p2
+             ON oi2.product_id = p2.product_id)
+        * 100,
+        2
+    ) AS spend_percentage
+FROM suppliers s
+JOIN products p
+    ON s.supplier_id = p.supplier_id
+JOIN order_items oi
+    ON p.product_id = oi.product_id
+GROUP BY
+    s.supplier_id,
+    s.supplier_name,
+    s.country,
+    s.avg_lead_time_days,
+    s.reliability_rating
+ORDER BY procurement_spend DESC;
+
+-- supplier risk flags
+SELECT
+    s.supplier_id,
+    s.supplier_name,
+    s.country,
+    ROUND(SUM(oi.quantity * p.unit_cost), 2) AS procurement_spend,
+    s.avg_lead_time_days,
+    s.reliability_rating,
+
+    CASE
+        WHEN SUM(oi.quantity * p.unit_cost) > 731898.94
+        THEN 'Yes'
+        ELSE 'No'
+    END AS high_spend,
+
+    CASE
+        WHEN s.avg_lead_time_days > 21.72
+        THEN 'Yes'
+        ELSE 'No'
+    END AS long_lead_time,
+
+    CASE
+        WHEN s.reliability_rating < 3.85
+        THEN 'Yes'
+        ELSE 'No'
+    END AS low_reliability
+
+FROM suppliers s
+JOIN products p
+    ON s.supplier_id = p.supplier_id
+JOIN order_items oi
+    ON p.product_id = oi.product_id
+
+GROUP BY
+    s.supplier_id,
+    s.supplier_name,
+    s.country,
+    s.avg_lead_time_days,
+    s.reliability_rating
+
+ORDER BY procurement_spend DESC;    
+    
+-- Supplier Risk Score
+SELECT
+    s.supplier_id,
+    s.supplier_name,
+    s.country,
+    ROUND(SUM(oi.quantity * p.unit_cost), 2) AS procurement_spend,
+    s.avg_lead_time_days,
+    s.reliability_rating,
+
+    CASE
+        WHEN SUM(oi.quantity * p.unit_cost) > 731898.94 THEN 1
+        ELSE 0
+    END AS high_spend_flag,
+
+    CASE
+        WHEN s.avg_lead_time_days > 21.72 THEN 1
+        ELSE 0
+    END AS long_lead_time_flag,
+
+    CASE
+        WHEN s.reliability_rating < 3.85 THEN 1
+        ELSE 0
+    END AS low_reliability_flag,
+
+    (
+        CASE WHEN SUM(oi.quantity * p.unit_cost) > 731898.94 THEN 1 ELSE 0 END
+        +
+        CASE WHEN s.avg_lead_time_days > 21.72 THEN 1 ELSE 0 END
+        +
+        CASE WHEN s.reliability_rating < 3.85 THEN 1 ELSE 0 END
+    ) AS risk_flag_count
+
+FROM suppliers s
+JOIN products p
+    ON s.supplier_id = p.supplier_id
+JOIN order_items oi
+    ON p.product_id = oi.product_id
+
+GROUP BY
+    s.supplier_id,
+    s.supplier_name,
+    s.country,
+    s.avg_lead_time_days,
+    s.reliability_rating
+
+ORDER BY risk_flag_count DESC, procurement_spend DESC;
+    
+-- Supplier dependency
+SELECT
+    s.supplier_name,
+    p.category,
+    ROUND(SUM(oi.quantity * p.unit_cost), 2) AS procurement_spend,
+    SUM(oi.quantity) AS units_ordered
+FROM suppliers s
+JOIN products p
+    ON s.supplier_id = p.supplier_id
+JOIN order_items oi
+    ON p.product_id = oi.product_id
+GROUP BY
+    s.supplier_name,
+    p.category
+ORDER BY
+    procurement_spend DESC;
+
+-- Category dependency
+WITH supplier_category AS (
+    SELECT
+        p.category,
+        s.supplier_name,
+        ROUND(SUM(oi.quantity * p.unit_cost), 2) AS supplier_category_spend
+    FROM suppliers s
+    JOIN products p
+        ON s.supplier_id = p.supplier_id
+    JOIN order_items oi
+        ON p.product_id = oi.product_id
+    GROUP BY
+        p.category,
+        s.supplier_name
+),
+category_totals AS (
+    SELECT
+        category,
+        SUM(supplier_category_spend) AS category_total_spend
+    FROM supplier_category
+    GROUP BY category
+),
+ranked AS (
+    SELECT
+        sc.category,
+        sc.supplier_name,
+        sc.supplier_category_spend,
+        ROUND(
+            sc.supplier_category_spend / ct.category_total_spend * 100,
+            2
+        ) AS category_spend_percentage,
+        ROW_NUMBER() OVER (
+            PARTITION BY sc.category
+            ORDER BY sc.supplier_category_spend DESC
+        ) AS supplier_rank
+    FROM supplier_category sc
+    JOIN category_totals ct
+        ON sc.category = ct.category
+)
+SELECT
+    category,
+    supplier_name,
+    supplier_category_spend,
+    category_spend_percentage
+FROM ranked
+WHERE supplier_rank = 1
+ORDER BY category_spend_percentage DESC;
+
+WITH supplier_spend AS (
+    SELECT
+        s.supplier_id,
+        s.supplier_name,
+        ROUND(SUM(oi.quantity * p.unit_cost), 2) AS procurement_spend
+    FROM suppliers s
+    JOIN products p
+        ON s.supplier_id = p.supplier_id
+    JOIN order_items oi
+        ON p.product_id = oi.product_id
+    GROUP BY
+        s.supplier_id,
+        s.supplier_name
+),
+category_supplier AS (
+    SELECT
+        p.category,
+        s.supplier_id,
+        s.supplier_name,
+        ROUND(SUM(oi.quantity * p.unit_cost), 2) AS category_supplier_spend
+    FROM suppliers s
+    JOIN products p
+        ON s.supplier_id = p.supplier_id
+    JOIN order_items oi
+        ON p.product_id = oi.product_id
+    GROUP BY
+        p.category,
+        s.supplier_id,
+        s.supplier_name
+),
+category_totals AS (
+    SELECT
+        category,
+        SUM(category_supplier_spend) AS category_total_spend
+    FROM category_supplier
+    GROUP BY category
+),
+ranked_suppliers AS (
+    SELECT
+        cs.*,
+        ROUND(
+            cs.category_supplier_spend / ct.category_total_spend * 100,
+            2
+        ) AS category_spend_percentage,
+        ROW_NUMBER() OVER (
+            PARTITION BY cs.category
+            ORDER BY cs.category_supplier_spend DESC
+        ) AS category_rank
+    FROM category_supplier cs
+    JOIN category_totals ct
+        ON cs.category = ct.category
+)
+SELECT
+    rs.category,
+    rs.supplier_name,
+    rs.category_spend_percentage,
+    ss.procurement_spend,
+    s.avg_lead_time_days,
+    s.reliability_rating,
+
+    CASE
+        WHEN ss.procurement_spend > 731898.94 THEN 1
+        ELSE 0
+    END AS high_spend_flag,
+
+    CASE
+        WHEN s.avg_lead_time_days > 21.72 THEN 1
+        ELSE 0
+    END AS long_lead_time_flag,
+
+    CASE
+        WHEN s.reliability_rating < 3.85 THEN 1
+        ELSE 0
+    END AS low_reliability_flag
+
+FROM ranked_suppliers rs
+JOIN supplier_spend ss
+    ON rs.supplier_id = ss.supplier_id
+JOIN suppliers s
+    ON rs.supplier_id = s.supplier_id
+WHERE rs.category_rank = 1
+ORDER BY rs.category_spend_percentage DESC;
+
+-- Supplier geographic concentration.
+SELECT
+    s.country,
+    COUNT(DISTINCT s.supplier_id) AS supplier_count,
+    SUM(oi.quantity) AS units_ordered,
+    ROUND(SUM(oi.quantity * p.unit_cost), 2) AS procurement_spend,
+    ROUND(
+        SUM(oi.quantity * p.unit_cost) /
+        (
+            SELECT SUM(oi2.quantity * p2.unit_cost)
+            FROM order_items oi2
+            JOIN products p2
+                ON oi2.product_id = p2.product_id
+        ) * 100,
+        2
+    ) AS spend_percentage
+FROM suppliers s
+JOIN products p
+    ON s.supplier_id = p.supplier_id
+JOIN order_items oi
+    ON p.product_id = oi.product_id
+GROUP BY s.country
+ORDER BY procurement_spend DESC;
+
+-- Master SQL view
+CREATE OR REPLACE VIEW supplier_risk_analysis AS
+
+SELECT
+    s.supplier_id,
+    s.supplier_name,
+    s.country,
+    s.avg_lead_time_days,
+    s.reliability_rating,
+
+    COUNT(DISTINCT p.product_id) AS product_count,
+    COUNT(DISTINCT oi.order_id) AS order_count,
+    SUM(oi.quantity) AS units_ordered,
+
+    ROUND(SUM(oi.quantity * p.unit_cost), 2) AS procurement_spend,
+
+    ROUND(
+        SUM(oi.quantity * p.unit_cost) /
+        (
+            SELECT SUM(oi2.quantity * p2.unit_cost)
+            FROM order_items oi2
+            JOIN products p2
+                ON oi2.product_id = p2.product_id
+        ) * 100,
+        2
+    ) AS spend_percentage,
+
+    CASE
+        WHEN SUM(oi.quantity * p.unit_cost) > 731898.94
+        THEN 1 ELSE 0
+    END AS high_spend_flag,
+
+    CASE
+        WHEN s.avg_lead_time_days > 21.72
+        THEN 1 ELSE 0
+    END AS long_lead_time_flag,
+
+    CASE
+        WHEN s.reliability_rating < 3.85
+        THEN 1 ELSE 0
+    END AS low_reliability_flag,
+
+    (
+        CASE
+            WHEN SUM(oi.quantity * p.unit_cost) > 731898.94
+            THEN 1 ELSE 0
+        END
+        +
+        CASE
+            WHEN s.avg_lead_time_days > 21.72
+            THEN 1 ELSE 0
+        END
+        +
+        CASE
+            WHEN s.reliability_rating < 3.85
+            THEN 1 ELSE 0
+        END
+    ) AS risk_flag_count
+
+FROM suppliers s
+JOIN products p
+    ON s.supplier_id = p.supplier_id
+JOIN order_items oi
+    ON p.product_id = oi.product_id
+
+GROUP BY
+    s.supplier_id,
+    s.supplier_name,
+    s.country,
+    s.avg_lead_time_days,
+    s.reliability_rating;
+
+SELECT *
+FROM supplier_risk_analysis
+ORDER BY risk_flag_count DESC, procurement_spend DESC;
+
+SELECT *
+FROM supplier_risk_analysis;
+
+SELECT
+    ROUND(
+        SUM(procurement_spend) /
+        (SELECT SUM(procurement_spend)
+         FROM supplier_risk_analysis)
+        * 100,
+        2
+    ) AS top_5_spend_percentage
+FROM (
+    SELECT procurement_spend
+    FROM supplier_risk_analysis
+    ORDER BY procurement_spend DESC
+    LIMIT 5
+) AS top5;
