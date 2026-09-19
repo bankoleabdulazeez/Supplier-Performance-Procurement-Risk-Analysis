@@ -21,6 +21,8 @@ This project analyzes supplier spend, operational performance, supplier concentr
 
 The analysis combines procurement spend with supplier lead time and reliability ratings to identify where procurement teams may need greater monitoring or further investigation.
 
+![Dashboard showing Supplier Performance & Procurement Risk](Supplier%20Performance%20&%20Procurement%20Risk.png)
+
 ### Key findings
 
 - Total procurement spend: **£18.30M**
